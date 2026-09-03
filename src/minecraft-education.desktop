@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Minecraft Education
+Comment=Play Minecraft Education on Linux (Android via Waydroid)
+Exec=AppRun
+Icon=minecraft-education
+Type=Application
+Categories=Game;
+Keywords=Education;Minecraft;Android;Waydroid;
+Terminal=false
+StartupNotify=true

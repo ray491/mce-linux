@@ -1,0 +1,480 @@
+#!/usr/bin/env bash
+# Minecraft Education on Linux — self-contained launcher (AppImage runtime).
+# Runs as the normal user; the first run asks once for the admin password
+# (pkexec) to install Waydroid + the Android image, then everything is automatic.
+set -uo pipefail
+
+PKG="com.mojang.minecraftedu"
+APP_NAME="Minecraft Education"
+APPDIR="${APPDIR:-$(cd "$(dirname "$(readlink -f "$0")")/../.." 2>/dev/null && pwd)}"
+DATA_DIR="${MCEDU_DATA_DIR:-$HOME/.local/share/mc-education}"
+APK_DIR="$DATA_DIR/apk"
+SETUP_DIR="$DATA_DIR/setup"
+LOG_DIR="$DATA_DIR/logs"
+XAPK="$APK_DIR/minecraft-education.xapk"
+XAPK_URL="https://d.apkpure.com/b/APK/$PKG?version=latest"
+XAPK_UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+
+# flags
+MULTI_WINDOW=1      # 0 = fullscreen Android UI
+FORCE_X11=0
+REPAIR=0
+RESET=0
+CHECK=0
+SHOW_HELP=0
+USE_SUDO=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --help|-h)           SHOW_HELP=1 ;;
+    --check)             CHECK=1 ;;
+    --reset)             RESET=1 ;;
+    --repair)            REPAIR=1 ;;
+    --fullscreen)        MULTI_WINDOW=0 ;;
+    --force-x11)         FORCE_X11=1 ;;
+    --sudo)              USE_SUDO=1 ;;
+  esac
+done
+
+log()   { echo "[$APP_NAME] $*"; }
+die()   { log "ERROR: $*"; exit 1; }
+is_tty(){ [ -t 1 ]; }
+
+notify() {
+  command -v notify-send >/dev/null 2>&1 && \
+    notify-send -i minecraft-education "$APP_NAME" "$1" >/dev/null 2>&1 || true
+}
+
+as_root() {
+  # Run "$@" as root. Prefer pkexec (works from a file manager, shows a GUI
+  # password dialog); fall back to sudo on a terminal.
+  if [ "$(id -u)" = "0" ]; then "$@"; return; fi
+  if [ "$USE_SUDO" = "1" ] || \
+     ! command -v pkexec >/dev/null 2>&1 || \
+     { [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ]; }; then
+    sudo "$@"
+  else
+    pkexec "$@"
+  fi
+}
+
+usage() {
+  cat <<EOF
+$APP_NAME (Linux, via Waydroid) — AppImage launcher
+
+Usage: $(basename "$0") [options]
+
+Options:
+  --help          show this help
+  --check         inspect the environment without changing anything
+  --reset         delete all app data (~/.local/share/mc-education) and exit
+  --repair        re-download the app and reinstall it into Android
+  --fullscreen    run inside the fullscreen Android UI (default: own window)
+  --force-x11     skip the Wayland check (Waydroid needs Wayland; try Weston)
+  --sudo          use 'sudo' instead of 'pkexec' for admin steps
+
+First run: downloads Minecraft Education (~413 MB) + the Android image (~2 GB)
+and asks for your admin password twice (setup, then app install). Everything
+after that is automatic. App data (Android image, user data, APKs) lives in
+~/.local/share/mc-education and is fully removable.
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# --check
+# ---------------------------------------------------------------------------
+run_check() {
+  echo "== $APP_NAME — environment check =="
+  . /etc/os-release 2>/dev/null || true
+  echo "OS:        ${PRETTY_NAME:-unknown} ($(uname -m))"
+
+  if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    echo "Wayland:   OK ($WAYLAND_DISPLAY)"
+  else
+    echo "Wayland:   NOT FOUND (session type: ${XDG_SESSION_TYPE:-unknown})"
+    echo "           Waydroid needs Wayland. On X11 run Weston and launch from there."
+  fi
+
+  if [ -d /sys/module/binder_linux ]; then
+    echo "binder:    loaded"
+  elif ls /lib/modules/"$(uname -r)"/kernel/drivers/android/binder_linux.ko* >/dev/null 2>&1; then
+    echo "binder:    available as module (loaded on first run)"
+  else
+    echo "binder:    MISSING — your kernel has no binder_linux module; Waydroid cannot run"
+  fi
+
+  if command -v waydroid >/dev/null 2>&1; then
+    echo "waydroid:  installed ($(waydroid --version 2>/dev/null | head -1))"
+  else
+    echo "waydroid:  not installed (installed on first run)"
+  fi
+
+  for img in "$DATA_DIR/waydroid/images/system.img" /var/lib/waydroid/images/system.img; do
+    if [ -r "$img" ]; then echo "Android:   image present"; break; fi
+  done
+  [ -r "$DATA_DIR/waydroid/images/system.img" ] || [ -r /var/lib/waydroid/images/system.img ] || \
+    echo "Android:   image not downloaded yet"
+
+  [ -f "$APK_DIR/.downloaded" ] && echo "APK:       downloaded (v$(cat "$APK_DIR/.version" 2>/dev/null))" || \
+    echo "APK:       not downloaded yet"
+  [ -f "$APK_DIR/.installed" ] && echo "APK:       installed in Android" || \
+    echo "APK:       not installed in Android yet"
+
+  echo "Data dir:  $DATA_DIR  ($(du -sh "$DATA_DIR" 2>/dev/null | cut -f1 || echo "not created yet"))"
+  local df_target="$HOME"
+  [ -d "$DATA_DIR" ] && df_target="$DATA_DIR"
+  df -h "$df_target" 2>/dev/null | awk 'NR==2{print "Disk:      " $4 " free on " $6}'
+  echo
+  echo "Run without options to install and launch the game."
+}
+
+# ---------------------------------------------------------------------------
+# downloads
+# ---------------------------------------------------------------------------
+download_apk() {
+  [ "$REPAIR" = "0" ] && [ -f "$APK_DIR/.downloaded" ] && return 0
+
+  notify "Downloading Minecraft Education (~413 MB)…"
+  log "Downloading Minecraft Education from APKPure (~413 MB)..."
+  rm -f "$XAPK"
+
+  if command -v curl >/dev/null 2>&1; then
+    if is_tty; then
+      curl -fL --progress-bar -A "$XAPK_UA" -e "https://apkpure.com/" "$XAPK_URL" -o "$XAPK" || die "download failed"
+    else
+      curl -fsSL -A "$XAPK_UA" -e "https://apkpure.com/" "$XAPK_URL" -o "$XAPK" || die "download failed"
+    fi
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q --user-agent="$XAPK_UA" -O "$XAPK" "$XAPK_URL" || die "download failed"
+  else
+    python3 - "$XAPK" <<'PY' || die "download failed"
+import sys, urllib.request
+req = urllib.request.Request(
+    "https://d.apkpure.com/b/APK/com.mojang.minecraftedu?version=latest",
+    headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Chrome/126.0"})
+open(sys.argv[1], "wb").write(urllib.request.urlopen(req).read())
+PY
+  fi
+
+  [ -s "$XAPK" ] || die "downloaded file is empty"
+  [ "$(head -c 2 "$XAPK")" = "PK" ] || die "downloaded file is not a valid package"
+
+  log "Extracting APK parts..."
+  rm -rf "$APK_DIR/app"
+  mkdir -p "$APK_DIR/app"
+  python3 - "$XAPK" "$APK_DIR/app" <<'PY' || die "failed to extract the package"
+import sys, zipfile
+z = zipfile.ZipFile(sys.argv[1])
+for n in z.namelist():
+    if n.lower().endswith(".apk"):
+        z.extract(n, sys.argv[2])
+PY
+  mv "$APK_DIR"/app/*.apk "$APK_DIR"/ 2>/dev/null
+  rm -rf "$APK_DIR/app"
+  ls "$APK_DIR"/*.apk >/dev/null 2>&1 || die "no APK found inside the downloaded package"
+
+  python3 - "$XAPK" "$APK_DIR/.version" <<'PY' || true
+import json, sys, zipfile
+z = zipfile.ZipFile(sys.argv[1])
+try:
+    v = json.loads(z.read("manifest.json"))["version_name"]
+except Exception:
+    v = ""
+open(sys.argv[2], "w").write(v)
+PY
+  touch "$APK_DIR/.downloaded"
+  notify "Download complete. One admin password prompt will follow."
+  log "Ready to install."
+}
+
+# ---------------------------------------------------------------------------
+# root setup (first run)
+# ---------------------------------------------------------------------------
+run_setup() {
+  cp "$APPDIR/usr/lib/mc-education/waydroid-setup.sh" "$SETUP_DIR/waydroid-setup.sh"
+  chmod +x "$SETUP_DIR/waydroid-setup.sh"
+  log "First-time setup: installing Waydroid + Android image (~2 GB)."
+  log "You will be asked for your admin password once. This takes a few minutes."
+  notify "First-time setup in progress (~5–10 min). An admin password prompt will appear."
+  as_root bash "$SETUP_DIR/waydroid-setup.sh" "$DATA_DIR" 2>&1 | tee -a "$LOG_DIR/setup.log"
+  local rc=${PIPESTATUS[0]}
+  echo
+  tail -5 "$LOG_DIR/setup.log" >&2
+  [ "$rc" = "0" ] || die "setup did not complete — see $LOG_DIR/setup.log"
+  log "Setup finished."
+}
+
+adb_ip() {
+  waydroid status 2>/dev/null | grep -oE "IP address:[[:space:]]+[0-9.]+" | awk '{print $3}'
+}
+
+# Host-side path of the Android /data dir (from the Waydroid config prop).
+android_data_dir() {
+  grep -m1 "^waydroid.host_data_path=" /var/lib/waydroid/waydroid.prop 2>/dev/null | cut -d= -f2
+}
+
+# The container's adb_keys file must contain the key in Android's proprietary
+# pubkey format (ANDROID_PUBKEY_ENCODED_SIZE), which only 'adb keygen' writes —
+# ssh-keygen's OpenSSH format is silently rejected by adbd. adbd reads the file
+# once at boot, so this must run BEFORE the session starts. No root needed:
+# Android's /data maps to a directory inside the user's home.
+prepare_adb_key() {
+  command -v adb >/dev/null 2>&1 || die "adb is not installed (install android-tools-adb)"
+  local data="$(android_data_dir)"
+  [ -n "$data" ] || die "could not find the Android data dir (waydroid.host_data_path)"
+
+  # ensure a keypair exists; 'adb keygen' writes the Android-format pubkey that
+  # adbd accepts. Use a dedicated key so we never clobber the user's own adb key.
+  local priv="$DATA_DIR/adbkey"
+  local pub="$DATA_DIR/adbkey.pub"
+  if [ ! -f "$priv" ]; then
+    adb keygen "$priv" >/dev/null 2>&1 || die "adb keygen failed"
+  fi
+
+  # the adb server presents keys from $HOME/.android/adbkey, so register ours there
+  cp "$priv" "$HOME/.android/adbkey" && chmod 600 "$HOME/.android/adbkey"
+
+  # write the pubkey into Android's authorized-keys file (host side, before boot)
+  mkdir -p "$data/misc/adb"
+  install -m 640 "$pub" "$data/misc/adb/adb_keys" 2>/dev/null || \
+    die "could not write the adb key into Android (is Waydroid initialized?)"
+  log "Android adb access configured."
+}
+
+install_apk() {
+  local ip="$(adb_ip)"
+  [ -n "$ip" ] || die "could not determine the Android container's IP address"
+  local dev="$ip:5555"
+
+  log "Installing Minecraft Education (5 APK parts) via adb…"
+  notify "Installing Minecraft Education…"
+  adb connect "$dev" >/dev/null 2>&1 || true
+  # wait for Android to be fully booted
+  booted=""
+  for _ in $(seq 1 60); do
+    if [ "$(timeout 6 adb -s "$dev" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+      booted=1
+      break
+    fi
+    sleep 2
+  done
+  [ -n "$booted" ] || die "Android did not answer over adb (see $LOG_DIR/install.log)"
+
+  # never suspend again: prevents the freeze/lxc-info breakage permanently
+  adb -s "$dev" shell settings put system screen_off_timeout 2147483647 >/dev/null 2>&1 || true
+  adb -s "$dev" shell settings put secure stay_on_while_plugged_in 3 >/dev/null 2>&1 || true
+
+  out="$(adb -s "$dev" install-multiple -r "$APK_DIR"/*.apk 2>&1)"
+  echo "$out" | grep -qi success || die "APK install failed: $out"
+  touch "$APK_DIR/.installed"
+  log "Minecraft Education installed."
+
+  # launch the game via the platform service so a window actually appears
+  # (a raw 'am start' runs the activity but creates no visible window)
+  launch_app
+}
+
+# ---------------------------------------------------------------------------
+# session
+# ---------------------------------------------------------------------------
+session_status() {
+  # waydroid prints "Session:\tRUNNING" (tab-separated) — match either separator
+  waydroid status 2>/dev/null | grep -oE "Session:[[:space:]]+[A-Z]+" | awk '{print $2}'
+}
+
+container_service_up() {
+  systemctl is-active --quiet waydroid-container 2>/dev/null
+}
+
+ensure_container_service() {
+  container_service_up && return 0
+  log "Starting the Waydroid container service…"
+  as_root systemctl start waydroid-container || die "could not start waydroid-container"
+}
+
+# Stop any existing session AND container (used only when the running
+# session is unhealthy — screen-off is disabled, so healthy sessions are
+# reused instead of rebooted for speed).
+stop_existing_session() {
+  local stale=""
+  [ "$(session_status)" = "RUNNING" ] && stale=1
+  pgrep -f "lxc-start.*-n waydroid" >/dev/null 2>&1 && stale=1
+  [ -z "$stale" ] && return 0
+
+  log "Stopping the existing Android session…"
+  timeout 20 waydroid session stop >/dev/null 2>&1 || true
+  sleep 2
+
+  # The session process may be dead while the container service still tracks
+  # it ("Already tracking a session" on next start); only a restart of the
+  # container service clears that stale state.
+  if [ "$(session_status)" = "RUNNING" ]; then
+    log "Stale session state detected — restarting the Waydroid container service…"
+    as_root systemctl restart waydroid-container || \
+      die "could not restart waydroid-container (stale session state remains)"
+    sleep 3
+  fi
+
+  # Kill any leftover container DIRECTLY. The container service's own stop can
+  # fail (e.g. "Too many open files" after a long uptime leaks its fds), which
+  # would leave a stale container that blocks the next start.
+  if pgrep -f "lxc-start.*-n waydroid" >/dev/null 2>&1; then
+    log "Stopping the leftover Android container…"
+    as_root lxc-stop -P /var/lib/waydroid/lxc -n waydroid -k >/dev/null 2>&1 || true
+  fi
+  for _ in $(seq 1 30); do
+    pgrep -f "lxc-start.*-n waydroid" >/dev/null 2>&1 || break
+    sleep 1
+  done
+  if pgrep -f "lxc-start.*-n waydroid" >/dev/null 2>&1; then
+    die "could not stop the old Android container (try rebooting)"
+  fi
+  log "Clean slate."
+}
+
+# Returns 0 when a session is running AND Android answers over adb — i.e.
+# it is healthy enough to reuse instead of cold-booting again.
+session_healthy() {
+  [ "$(session_status)" = "RUNNING" ] || return 1
+  local ip="$(adb_ip)"
+  [ -n "$ip" ] || return 1
+  adb connect "$ip:5555" >/dev/null 2>&1 || true
+  [ "$(timeout 6 adb -s "$ip:5555" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]
+}
+
+start_session() {
+  # Fast path: Android is already booted (previous launch left it running —
+  # screen-off is disabled so it never froze). Just reuse it.
+  if session_healthy; then
+    log "Android is already running — reusing the session."
+    return 0
+  fi
+
+  # Slow path: no session, or the running one is unhealthy/stale.
+  stop_existing_session
+  log "Starting the Android session… (Android boots now; first boot is slowest)"
+  # setsid: detach so the session keeps running after this launcher exits —
+  # the next launch then reuses it instead of cold-booting Android again.
+  setsid waydroid session start >"$LOG_DIR/session.log" 2>&1 < /dev/null &
+  SESSION_PID=$!
+  ready=""
+  for i in $(seq 1 300); do
+    if session_healthy; then
+      ready=1
+      break
+    fi
+    if ! kill -0 "$SESSION_PID" 2>/dev/null; then
+      break   # session process died and status is not RUNNING
+    fi
+    if [ $((i % 30)) -eq 0 ]; then log "still waiting for the Android session (${i}s)..."; fi
+    sleep 1
+  done
+  if [ -z "$ready" ]; then
+    {
+      echo "---- waydroid status ----"
+      waydroid status 2>&1
+      echo "---- session log (tail) ----"
+      tail -30 "$LOG_DIR/session.log" 2>&1
+    } >&2
+    die "the Android session failed to start — see $LOG_DIR/session.log"
+  fi
+  log "Android session ready."
+}
+
+apply_window_mode() {
+  local want="false"
+  [ "$MULTI_WINDOW" = "1" ] && want="true"
+  local marker="$DATA_DIR/.window_mode_$want"
+  if [ ! -f "$marker" ]; then
+    log "Switching Android to $([ "$want" = "true" ] && echo "windowed" || echo "fullscreen") mode…"
+    timeout 15 waydroid prop set persist.waydroid.multi_windows "$want" >/dev/null 2>&1 || true
+    touch "$marker"
+  fi
+}
+
+launch_app() {
+  # 'waydroid app launch' goes through Waydroid's platform service, which is
+  # what actually creates the visible window on the host desktop. A raw
+  # 'adb am start' runs the activity but produces NO window — don't use it
+  # for launching. (adb remains the install path.)
+  if [ "$MULTI_WINDOW" = "1" ]; then
+    for _ in $(seq 1 3); do
+      timeout 60 waydroid app launch "$PKG" && return 0
+      sleep 3
+    done
+    log "WARNING: could not launch the app; try --repair or start it from the Waydroid UI."
+    return 1
+  else
+    waydroid show-full-ui >/dev/null 2>&1 &
+    sleep 5
+    timeout 60 waydroid app launch "$PKG" >/dev/null 2>&1 || true
+    return 0
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# --reset
+# ---------------------------------------------------------------------------
+do_reset() {
+  if is_tty; then
+    read -r -p "Delete ALL app data for $APP_NAME ($DATA_DIR)? [y/N] " ans
+    [ "$ans" = "y" ] || [ "$ans" = "Y" ] || { echo "Aborted."; exit 0; }
+  fi
+  # remove the /var/lib/waydroid symlink only if it points into our data dir
+  as_root sh -c 'l=$(readlink /var/lib/waydroid 2>/dev/null); case "$l" in *mc-education*) rm -f /var/lib/waydroid;; esac' 2>/dev/null || true
+  rm -rf "$DATA_DIR"
+  log "Reset complete. Everything was removed."
+}
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+main() {
+  if [ "$SHOW_HELP" = "1" ]; then usage; exit 0; fi
+  if [ "$CHECK" = "1" ]; then run_check; exit 0; fi
+  if [ "$RESET" = "1" ]; then do_reset; exit 0; fi
+
+  # prerequisites
+  [ "$(uname -m)" = "x86_64" ] || die "this build only supports x86_64"
+  if [ "$FORCE_X11" = "0" ] && [ -z "${WAYLAND_DISPLAY:-}" ] && [ "$XDG_SESSION_TYPE" != "wayland" ]; then
+    log "No Wayland session detected. Waydroid needs Wayland."
+    log "If you are on X11, run this inside Weston (or pass --force-x11 at your own risk)."
+    exit 1
+  fi
+  free_kb="$(df -Pk "$DATA_DIR" 2>/dev/null | awk 'NR==2{print $4}')"
+  if [ -n "$free_kb" ] && [ "$free_kb" -lt 6291456 ]; then
+    log "WARNING: less than 6 GB free on $(df -Pk "$DATA_DIR" 2>/dev/null | awk 'NR==2{print $6}')"
+    log "The Android image needs ~2 GB and the game ~1 GB. Free some space first."
+  fi
+
+  mkdir -p "$DATA_DIR" "$APK_DIR" "$SETUP_DIR" "$LOG_DIR"
+
+  [ "$REPAIR" = "1" ] && rm -f "$APK_DIR/.downloaded" "$APK_DIR/.installed"
+
+  download_apk
+
+  NEED_SETUP=0
+  command -v waydroid >/dev/null 2>&1 || NEED_SETUP=1
+  [ -r "$DATA_DIR/waydroid/images/system.img" ] || [ -r /var/lib/waydroid/images/system.img ] || NEED_SETUP=1
+
+  if [ "$NEED_SETUP" = "1" ]; then
+    run_setup
+  fi
+
+  ensure_container_service
+  prepare_adb_key     # must run before boot: adbd reads the key only at startup
+  start_session
+  apply_window_mode
+  if [ -f "$APK_DIR/.installed" ]; then
+    launch_app
+  else
+    install_apk   # also launches the game
+  fi
+  notify "Minecraft Education launched."
+
+  log "Minecraft Education is running."
+  log "Tip: Android stays on in the background, so the next launch is fast."
+  log "     Run 'waydroid session stop' to shut it down."
+}
+
+main "$@"
