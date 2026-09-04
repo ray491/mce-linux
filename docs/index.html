@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minecraft Education for Linux — One AppImage, zero setup</title>
+  <meta name="description" content="A self-contained AppImage that installs and runs Minecraft Education Edition on x86_64 Linux by booting Android inside Waydroid — fully isolated, no Google account required, no manual configuration.">
+  <meta property="og:title" content="Minecraft Education for Linux">
+  <meta property="og:description" content="Run Minecraft Education Edition on Linux from a single portable AppImage — Waydroid-powered, fully isolated, no Google account required.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="assets/icon.png">
+  <link rel="icon" type="image/png" href="assets/icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <a class="skip-link" href="#overview">Skip to content</a>
+
+  <!-- ============ NAV ============ -->
+  <header class="site-nav" id="site-nav">
+    <nav class="nav-inner" aria-label="Primary">
+      <a class="brand" href="#top" aria-label="Minecraft Education for Linux — home">
+        <img src="assets/icon.png" alt="" width="28" height="28">
+        <span>Minecraft&nbsp;Education<span class="brand-dim">&nbsp;for&nbsp;Linux</span></span>
+      </a>
+      <button class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu">
+        <span class="sr-only">Menu</span>
+        <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+      </button>
+      <ul class="nav-menu" id="nav-menu">
+        <li><a class="nav-link" href="#overview">Overview</a></li>
+        <li><a class="nav-link" href="#features">Features</a></li>
+        <li><a class="nav-link" href="#architecture">Architecture</a></li>
+        <li><a class="nav-link" href="#requirements">Requirements</a></li>
+        <li><a class="nav-link" href="#quickstart">Quick&nbsp;Start</a></li>
+        <li><a class="nav-link" href="#usage">Usage</a></li>
+        <li><a class="nav-link" href="#faq">FAQ</a></li>
+        <li><a class="nav-link" href="#troubleshooting">Help</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="top">
+
+    <!-- ============ HERO ============ -->
+    <section class="hero">
+      <div class="wrap hero-inner">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="pulse-dot"></span> Open source · Linux x86_64 · Wayland</p>
+          <h1>Minecraft Education,<br>now at home on <span class="grad">Linux</span>.</h1>
+          <p class="hero-lead">
+            A single, portable <strong>AppImage</strong> that installs and runs
+            <strong>Minecraft Education Edition</strong> on x86_64 Linux — by booting Android inside
+            <a href="https://waydro.id/" target="_blank" rel="noopener">Waydroid</a>.
+            Fully isolated. No Google account. No manual configuration.
+          </p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="#quickstart">Get started</a>
+            <a class="btn btn-ghost" href="#requirements">Check requirements</a>
+          </div>
+          <ul class="badge-row" aria-label="Project tags">
+            <li><span class="badge badge-green">Android · Waydroid / LineageOS 20</span></li>
+            <li><span class="badge badge-blue">Platform · Linux x86_64</span></li>
+            <li><span class="badge badge-orange">Runtime · AppImage</span></li>
+            <li><span class="badge badge-neutral">Shell · Bash</span></li>
+            <li><span class="badge badge-teal">Session · Wayland</span></li>
+          </ul>
+        </div>
+
+        <div class="hero-term" aria-label="Quick start demo">
+          <div class="term-head">
+            <span class="term-dots"><i></i><i></i><i></i></span>
+            <span class="term-title">~ /downloads</span>
+          </div>
+          <div class="term-body">
+            <pre><code><span class="c-dim"># Build it</span>
+$ ./build-appimage.sh
+<span class="c-dim"># Run it — first launch handles setup automatically</span>
+$ ./<span class="c-bright">Minecraft-Education-Linux-x86_64.AppImage</span>
+<span class="c-ok">✔ Waydroid session ready — Android 13 booted</span>
+<span class="c-ok">✔ Minecraft Education installed via adb</span>
+<span class="c-ok">✔ Launching game window…</span>
+<span class="c-dim"># Done. Repeat launches reuse the session in ~1&nbsp;second.</span></code></pre>
+            <button class="copy-btn" type="button" data-copy="build-appimage.sh
+./Minecraft-Education-Linux-x86_64.AppImage" aria-label="Copy commands to clipboard">Copy</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ OVERVIEW ============ -->
+    <section class="section" id="overview">
+      <div class="wrap narrow">
+        <div class="sec-head">
+          <p class="kicker">Overview</p>
+          <h2>Closing the Linux gap</h2>
+        </div>
+        <p class="lead">
+          Minecraft Education Edition ships for Windows, macOS, ChromeOS, and Android — but not Linux.
+          This project closes that gap with <strong>one portable AppImage</strong> that:
+        </p>
+        <ol class="steps">
+          <li><span class="step-num">1</span><p>Sets up <a href="https://waydro.id/" target="_blank" rel="noopener">Waydroid</a> — Android in a container — automatically on first run.</p></li>
+          <li><span class="step-num">2</span><p>Installs the official Minecraft Education Android app (split APK bundle) into it.</p></li>
+          <li><span class="step-num">3</span><p>Launches the game <strong>in its own window</strong> on your Linux desktop.</p></li>
+        </ol>
+        <p class="lead muted">
+          The entire Android environment lives inside the app's own data directory, so your host system stays
+          clean — uninstalling is a single command. No Google account, no Play Store registration,
+          no manual Waydroid configuration.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ FEATURES ============ -->
+    <section class="section alt" id="features">
+      <div class="wrap">
+        <div class="sec-head">
+          <p class="kicker">Features</p>
+          <h2>Everything handled for you</h2>
+          <p class="sec-sub">Designed around isolation, idempotency, and instant relaunch.</p>
+        </div>
+        <div class="card-grid">
+          <article class="card">
+            <div class="card-icon">📦</div>
+            <h3>Single-file distribution</h3>
+            <p>One ~200 KB AppImage. The Android image (~2 GB) and game package (~413 MB) are fetched on first run only.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon">🔒</div>
+            <h3>Fully isolated</h3>
+            <p>All Android data lives under <code>~/.local/share/mc-education</code>; <code>/var/lib/waydroid</code> is redirected there via symlink.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon">🚫</div>
+            <h3>No Google account required</h3>
+            <p>Installed with <code>adb install-multiple</code> — the same mechanism the Play Store uses — straight from the APK bundle.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon">🪟</div>
+            <h3>Windowed or fullscreen</h3>
+            <p>Defaults to a dedicated game window; <code>--fullscreen</code> switches to the full Android UI.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon">⚡</div>
+            <h3>Fast relaunch</h3>
+            <p>A healthy Android session is <strong>reused</strong> instead of rebooted: repeat launches complete in ~1 second.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon">🩹</div>
+            <h3>Self-healing cleanup</h3>
+            <p>Every launch validates the session and cleans up stale containers, dead-session tracking, and leftover processes before booting.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon">🔑</div>
+            <h3>Robust adb integration</h3>
+            <p>Host-side key provisioning (Android's proprietary key format via <code>adb keygen</code>) — <strong>no root access</strong> for install or launch.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon">🩺</div>
+            <h3>Diagnostics built in</h3>
+            <p><code>--check</code> performs a full environment audit; detailed logs are written to <code>~/.local/share/mc-education/logs/</code>.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon">🔁</div>
+            <h3>Idempotent setup</h3>
+            <p>All system-level steps are safe to re-run; setup never repeats completed work.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ARCHITECTURE ============ -->
+    <section class="section" id="architecture">
+      <div class="wrap">
+        <div class="sec-head">
+          <p class="kicker">Architecture</p>
+          <h2>How the pieces fit together</h2>
+          <p class="sec-sub">Everything the user touches runs inside one portable AppImage.</p>
+        </div>
+
+        <div class="diagram" aria-label="Architecture diagram">
+          <div class="diag-box diag-appimage">
+            <div class="diag-label">AppImage <span class="tag tag-orange">portable · ~200 KB</span></div>
+            <div class="diag-inner">
+              <div class="diag-chip diag-chip-main">AppRun → mc-education <span class="muted-inline">(orchestrator, runs as the user)</span></div>
+              <div class="diag-chip-row">
+                <div class="diag-chip">download_apk <span class="sub">APKPure · ~413 MB · split APKs</span></div>
+                <div class="diag-chip">prepare_adb_key <span class="sub">adb keygen → host-side key write</span></div>
+                <div class="diag-chip">start_session <span class="sub">reuse healthy · or cold boot via setsid</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="diag-arrow" aria-hidden="true">↓</div>
+
+          <div class="diag-box">
+            <div class="diag-label">Waydroid session <span class="tag tag-green">Android 13 / LineageOS 20</span></div>
+            <div class="diag-inner">
+              <div class="diag-chip-row">
+                <div class="diag-chip">adb install-multiple <span class="sub">5 APK parts · as user</span></div>
+                <div class="diag-chip">waydroid app launch <span class="sub">creates the visible window</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="diag-arrow" aria-hidden="true">↓</div>
+
+          <div class="diag-box diag-root">
+            <div class="diag-label">One-time setup <span class="tag tag-blue">first run only</span></div>
+            <div class="diag-inner">
+              <p class="diag-note">A single admin prompt (<code>pkexec</code>/<code>sudo</code>) runs:
+                binder module · Waydroid apt install · <code>waydroid init -s GAPPS</code> (~2 GB) ·
+                <code>waydroid-container</code> service.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout">
+          <h3>Why it's designed this way</h3>
+          <ul class="tick-list">
+            <li><strong>adb for install, platform service for launch.</strong> The game is installed over <code>adb</code>
+              (<code>install-multiple</code> handles split APKs natively) but <em>launched</em> with
+              <code>waydroid app launch</code>, which routes through Waydroid's platform service — the only path that
+              creates a visible window on the host desktop. A raw <code>adb am start</code> produces no window and is deliberately avoided.</li>
+            <li><strong>Key provisioning before boot.</strong> Android's adbd reads <code>/data/misc/adb/adb_keys</code> exactly once, at
+              boot, and only accepts Android's proprietary pubkey format. The launcher generates the key with
+              <code>adb keygen</code> and writes it host-side before the session starts — no root, no restart race.</li>
+            <li><strong>Native x86_64 Android image.</strong> No ARM translation layer is needed, so the game runs at full speed.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ REQUIREMENTS ============ -->
+    <section class="section alt" id="requirements">
+      <div class="wrap">
+        <div class="sec-head">
+          <p class="kicker">Requirements</p>
+          <h2>What you need to run it</h2>
+          <p class="sec-sub">Audit your machine without changing anything: <code>./Minecraft-Education-Linux-x86_64.AppImage --check</code></p>
+        </div>
+        <div class="req-grid">
+          <article class="req"><span class="req-icon">🖥️</span><div><h3>CPU / Arch</h3><p>x86_64 (AMD64)</p></div></article>
+          <article class="req"><span class="req-icon">🐧</span><div><h3>OS</h3><p>Ubuntu 22.04+ / Debian 12+ <span class="muted">(tested on Ubuntu 26.04)</span></p></div></article>
+          <article class="req"><span class="req-icon">🖼️</span><div><h3>Display server</h3><p><strong>Wayland</strong> (Ubuntu default). On X11 run inside <a href="https://gitlab.freedesktop.org/wayland/weston" target="_blank" rel="noopener">Weston</a> or pass <code>--force-x11</code> at your own risk.</p></div></article>
+          <article class="req"><span class="req-icon">💾</span><div><h3>Disk</h3><p>~6 GB free <span class="muted">(Android image ~2 GB + game ~1 GB + workspace)</span></p></div></article>
+          <article class="req"><span class="req-icon">🧠</span><div><h3>RAM</h3><p>~4 GB</p></div></article>
+          <article class="req"><span class="req-icon">🧩</span><div><h3>Kernel</h3><p>Must ship the <code>binder_linux</code> module <span class="muted">(stock Ubuntu/Debian kernels include it). Verify with <code>--check</code>.</span></p></div></article>
+          <article class="req"><span class="req-icon">🔐</span><div><h3>Credentials</h3><p>Your admin password <strong>once</strong>, on first run (setup).</p></div></article>
+          <article class="req"><span class="req-icon">🌐</span><div><h3>Network</h3><p>Internet on first launch <span class="muted">(~2.4 GB total download)</span></p></div></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ QUICK START ============ -->
+    <section class="section" id="quickstart">
+      <div class="wrap">
+        <div class="sec-head">
+          <p class="kicker">Quick Start</p>
+          <h2>Up and running in two commands</h2>
+        </div>
+        <div class="code-block">
+          <div class="code-head"><span>Terminal</span><button class="copy-btn" type="button" data-copy="./build-appimage.sh
+./Minecraft-Education-Linux-x86_64.AppImage">Copy</button></div>
+          <pre><code><span class="c-dim"># Build it</span>
+./build-appimage.sh
+
+<span class="c-dim"># Run it (or double-click the AppImage in your file manager)</span>
+./Minecraft-Education-Linux-x86_64.AppImage</code></pre>
+        </div>
+        <p class="hint">That's it. The first launch performs one-time setup; every launch after that is automatic.</p>
+
+        <div class="two-col">
+          <div class="callout">
+            <h3>What happens on first run?</h3>
+            <ol class="plain-list">
+              <li><strong>Downloads</strong> the game package (~413 MB) from APKPure and extracts the 5 APK parts.</li>
+              <li><strong>Asks for your admin password once</strong> (graphical <code>pkexec</code> dialog; <code>--sudo</code> for terminals) and runs one-time setup: binder module · Waydroid install · Android image with GApps (~2 GB) · enables the <code>waydroid-container</code> service.</li>
+              <li><strong>Boots</strong> the Android session and waits until Android reports fully booted.</li>
+              <li><strong>Installs Minecraft Education</strong> via <code>adb install-multiple</code> — no Google account, no further password prompts.</li>
+              <li><strong>Launches the game</strong> in its own window.</li>
+            </ol>
+            <p class="hint">Sign in inside the app with your Microsoft 365 Education account as usual.</p>
+          </div>
+          <aside class="tip-card">
+            <h3>💡 First launch takes ~5–10 minutes</h3>
+            <p>That's the one-time download and setup. <strong>Every launch after that takes about a second</strong> — a healthy Android session is reused instead of rebooted.</p>
+            <hr>
+            <p class="small muted">Total first-run download: <strong>~2.4 GB</strong> (Android image + game package).</p>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ USAGE ============ -->
+    <section class="section alt" id="usage">
+      <div class="wrap">
+        <div class="sec-head">
+          <p class="kicker">Usage</p>
+          <h2>Command-line reference</h2>
+          <p class="sec-sub">One binary, a handful of useful flags.</p>
+        </div>
+
+        <div class="code-block">
+          <div class="code-head"><span>Terminal</span><button class="copy-btn" type="button" data-copy="./Minecraft-Education-Linux-x86_64.AppImage [options]">Copy</button></div>
+          <pre><code>./Minecraft-Education-Linux-x86_64.AppImage <span class="c-dim">[options]</span></code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table class="flag-table">
+            <thead>
+              <tr><th>Flag</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>(no flags)</code></td><td>Install (if needed) and launch the game.</td></tr>
+              <tr><td><code>--help</code>, <code>-h</code></td><td>Show the built-in help.</td></tr>
+              <tr><td><code>--check</code></td><td>Audit the environment (OS, Wayland, binder module, Waydroid, images, disk space) without changing anything.</td></tr>
+              <tr><td><code>--repair</code></td><td>Re-download the game package and reinstall it into Android.</td></tr>
+              <tr><td><code>--fullscreen</code></td><td>Run inside the fullscreen Android UI instead of a dedicated window.</td></tr>
+              <tr><td><code>--reset</code></td><td>Delete <strong>all</strong> app data (<code>~/.local/share/mc-education</code>) and exit.</td></tr>
+              <tr><td><code>--sudo</code></td><td>Use <code>sudo</code> instead of <code>pkexec</code> for the admin step (e.g. terminal-only environments).</td></tr>
+              <tr><td><code>--force-x11</code></td><td>Skip the Wayland check (Waydroid requires Wayland; only use with Weston).</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout slim">
+          <p>To fully shut down the background Android session after playing:</p>
+          <div class="code-inline-block"><pre><code>waydroid session stop</code></pre><button class="copy-btn" type="button" data-copy="waydroid session stop">Copy</button></div>
+        </div>
+
+        <div class="two-col lifecycle">
+          <div>
+            <h3>Session lifecycle</h3>
+            <p class="muted">Launch speed is handled by a <strong>health check + reuse</strong> strategy.</p>
+            <div class="flow" aria-label="Session lifecycle decision tree">
+              <div class="flow-node">launch</div>
+              <div class="flow-q">Is Android already running <em>and</em> answering over adb?</div>
+              <div class="flow-branches">
+                <div class="flow-yes"><span class="flow-tag flow-tag-yes">yes</span><span>Reuse the session</span><code class="flow-time">~1 second</code></div>
+                <div class="flow-no"><span class="flow-tag flow-tag-no">no</span>
+                  <div class="flow-no-inner">
+                    <span>Stop stale session / container (if any)</span>
+                    <span>Boot a fresh session</span>
+                    <code class="flow-time">~10–15 s warm · minutes on first ever boot</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h3>Why relaunch is instant</h3>
+            <ul class="tick-list">
+              <li>The session starts with <code>setsid</code>, so it <strong>keeps running in the background</strong> after the launcher exits — the next launch finds and reuses it.</li>
+              <li>A session is <em>healthy</em> only if Waydroid reports <code>RUNNING</code> <strong>and</strong> Android answers <code>sys.boot_completed=1</code> over adb. Anything less triggers the clean-boot path.</li>
+              <li>Android's screen-off is disabled after install, so the container <strong>never suspends or freezes</strong>.</li>
+              <li class="warn">The background session consumes RAM until you stop it (<code>waydroid session stop</code>) or reboot — the deliberate trade-off for instant relaunch.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FOOTPRINT ============ -->
+    <section class="section" id="footprint">
+      <div class="wrap">
+        <div class="sec-head">
+          <p class="kicker">Data isolation</p>
+          <h2>Your system stays clean</h2>
+          <p class="sec-sub">Everything the app owns lives in one directory.</p>
+        </div>
+        <div class="two-col">
+          <div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead><tr><th>Path</th><th>Contents</th></tr></thead>
+                <tbody>
+                  <tr><td><code>~/.local/share/mc-education/apk/</code></td><td>Downloaded package + extracted APK parts + install state markers</td></tr>
+                  <tr><td><code>~/.local/share/mc-education/waydroid/</code></td><td>Android image, user data, installed apps</td></tr>
+                  <tr><td><code>~/.local/share/mc-education/adbkey*</code></td><td>adb keypair (Android format) used for installs</td></tr>
+                  <tr><td><code>~/.local/share/mc-education/logs/</code></td><td><code>setup.log</code>, <code>session.log</code>, <code>install.log</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="hint"><code>/var/lib/waydroid</code> is a <strong>symlink</strong> into <code>~/.local/share/mc-education/waydroid/</code> — deleting that one folder removes everything Waydroid owns.</p>
+          </div>
+          <div>
+            <h3>Uninstall (complete)</h3>
+            <div class="code-block">
+              <div class="code-head"><span>Terminal</span><button class="copy-btn" type="button" data-copy="./Minecraft-Education-Linux-x86_64.AppImage --reset    # removes all app data
+rm Minecraft-Education-Linux-x86_64.AppImage            # removes the launcher">Copy</button></div>
+              <pre><code>./Minecraft-Education-Linux-x86_64.AppImage --reset    <span class="c-dim"># removes all app data</span>
+rm Minecraft-Education-Linux-x86_64.AppImage            <span class="c-dim"># removes the launcher</span></code></pre>
+            </div>
+            <p class="hint">The only system-level changes — all made by the one-time root setup, all reversible:</p>
+            <ul class="plain-list small-list">
+              <li><code>binder_linux</code> kernel module auto-load → remove <code>/etc/modules-load.d/waydroid.conf</code> if desired</li>
+              <li><code>waydroid</code> apt package + <code>repo.waydro.id</code> source → <code>sudo apt remove waydroid</code></li>
+              <li><code>waydroid-container</code> systemd service → <code>sudo systemctl disable --now waydroid-container</code></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SECURITY ============ -->
+    <section class="section alt" id="security">
+      <div class="wrap">
+        <div class="sec-head">
+          <p class="kicker">Security</p>
+          <h2>Least privilege, by design</h2>
+        </div>
+        <div class="card-grid grid-3">
+          <article class="card">
+            <h3>🔑 Least privilege</h3>
+            <p>The launcher runs entirely as the <strong>normal user</strong>. Root is invoked only for one-time system setup and emergency cleanup — never for install, launch, or adb.</p>
+          </article>
+          <article class="card">
+            <h3>🗝️ adb key handling</h3>
+            <p>A dedicated keypair generated with <code>adb keygen</code> lives in the app's private data dir — never your personal <code>~/.android</code>. The container sees only the public half (mode <code>0640</code>, group <code>shell</code>).</p>
+          </article>
+          <article class="card">
+            <h3>🙅 No Google account data</h3>
+            <p>Install happens via adb from the downloaded APK bundle — no Play Store login, no GSF registration on your host.</p>
+          </article>
+          <article class="card">
+            <h3>🌐 Network surface</h3>
+            <p>Downloads come from APKPure (game), <code>repo.waydro.id</code> / SourceForge (Waydroid + image) only. In-game sign-in talks to Microsoft's official services, as on any platform.</p>
+          </article>
+          <article class="card">
+            <h3>📦 Isolation</h3>
+            <p>Android runs in an LXC container confined to your home directory; removing it removes the entire Android environment.</p>
+          </article>
+          <article class="card">
+            <h3>🧾 Auditability</h3>
+            <p>Every setup step logs to <code>~/.local/share/mc-education/logs/</code>; <code>--check</code> reports exact environment state at any time.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FAQ ============ -->
+    <section class="section" id="faq">
+      <div class="wrap narrow">
+        <div class="sec-head">
+          <p class="kicker">FAQ</p>
+          <h2>Frequently asked questions</h2>
+        </div>
+        <div class="accordion">
+          <details>
+            <summary>Do I need a Google account?</summary>
+            <div class="acc-body"><p>No. The game is installed from the APK bundle over adb, without touching Google Play.</p></div>
+          </details>
+          <details>
+            <summary>Does Minecraft Education run natively?</summary>
+            <div class="acc-body"><p>The Android build ships x86_64 binaries, so there is no ARM translation overhead. Performance depends on your GPU/Wayland compositor; fullscreen mode generally performs best.</p></div>
+          </details>
+          <details>
+            <summary>Where is the game downloaded from?</summary>
+            <div class="acc-body"><p>APKPure, a third-party mirror of the free Play Store app. In-game sign-in still uses your official Microsoft Education account.</p></div>
+          </details>
+          <details>
+            <summary>Does this touch my personal adb keys?</summary>
+            <div class="acc-body"><p>No. The launcher generates a dedicated keypair inside <code>~/.local/share/mc-education/</code> and registers it for the Waydroid session only.</p></div>
+          </details>
+          <details>
+            <summary>Why does the app need admin rights at all?</summary>
+            <div class="acc-body"><p>Exactly three one-time operations require root: loading a kernel module (<code>binder_linux</code>), installing the Waydroid apt package, and enabling its systemd service. Everything else — install, launch, updates — runs as your user.</p></div>
+          </details>
+          <details>
+            <summary>How do I update the game?</summary>
+            <div class="acc-body"><p>Minecraft Education updates itself inside Android. To force a clean reinstall: <code>./Minecraft-Education-Linux-x86_64.AppImage --repair</code>.</p></div>
+          </details>
+          <details>
+            <summary>Can I move the AppImage around?</summary>
+            <div class="acc-body"><p>Yes — it is fully portable. App data stays in <code>~/.local/share/mc-education</code>, independent of where the AppImage file lives.</p></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TROUBLESHOOTING ============ -->
+    <section class="section alt" id="troubleshooting">
+      <div class="wrap">
+        <div class="sec-head">
+          <p class="kicker">Troubleshooting</p>
+          <h2>When something goes wrong</h2>
+          <p class="sec-sub">Logs for every component live in <code>~/.local/share/mc-education/logs/</code>. When in doubt, run the AppImage from a terminal and read the output.</p>
+        </div>
+        <div class="accordion">
+          <details>
+            <summary>Nothing happens when double-clicking</summary>
+            <div class="acc-body"><p>Run from a terminal to see output: <code>./Minecraft-Education-Linux-x86_64.AppImage</code>. Check the logs under <code>~/.local/share/mc-education/logs/</code>.</p></div>
+          </details>
+          <details>
+            <summary>“No Wayland session detected”</summary>
+            <div class="acc-body"><p>You're on X11. Waydroid requires Wayland — start Weston and launch the AppImage from inside it, or pass <code>--force-x11</code> at your own risk.</p></div>
+          </details>
+          <details>
+            <summary>“failed to load the binder_linux module”</summary>
+            <div class="acc-body"><p>Your kernel lacks the Android binder driver. Run <code>--check</code> to confirm. Stock Ubuntu/Debian kernels include it; custom or older kernels may not.</p></div>
+          </details>
+          <details>
+            <summary>Game runs but no window appears</summary>
+            <div class="acc-body"><p>Ensure you're launching with the current build. <code>waydroid app launch</code> (used by the launcher) creates the window; a raw <code>adb am start</code> does <strong>not</strong>. If the window still doesn't appear, check your compositor/taskbar and the session log.</p></div>
+          </details>
+          <details>
+            <summary>“adb: device unauthorized”</summary>
+            <div class="acc-body"><p>adbd only accepts keys in Android's proprietary pubkey format (<code>adb keygen</code>, not <code>ssh-keygen</code>), and it reads them <strong>once at boot</strong>. The launcher handles both. If it ever happens anyway: delete <code>~/.local/share/mc-education/adbkey*</code> and re-run — the key is re-provisioned before the next boot.</p></div>
+          </details>
+          <details>
+            <summary>“Couldn't get LXC status. Assuming STOPPED” in waydroid.log</summary>
+            <div class="acc-body"><p>A known Waydroid quirk on some kernels: after Android suspends (~70 s idle) the container is frozen and <code>lxc-info</code> fails to report state — making Waydroid believe the container is STOPPED while it is actually healthy. The launcher prevents the freeze outright by disabling Android's screen-off, and never relies on <code>lxc-info</code> for the install path (it uses adb).</p></div>
+          </details>
+          <details>
+            <summary>“RuntimeError: Already tracking a session”</summary>
+            <div class="acc-body"><p>A previous session died uncleanly but the container service still tracks it. The launcher detects and clears this by restarting the container service and killing any leftover container directly (<code>lxc-stop -k</code>).</p></div>
+          </details>
+          <details>
+            <summary>Slow launches (&gt;1 min)</summary>
+            <div class="acc-body"><p>This is the <strong>cold-boot</strong> path (no healthy session exists). Repeat launches should reuse the session in ~1 s. If every launch cold-boots, the session is dying between launches — check <code>session.log</code>.</p></div>
+          </details>
+          <details>
+            <summary>On-screen keyboard pops up</summary>
+            <div class="acc-body"><p>Inside Android (Waydroid shell → Settings → System → Languages &amp; input → Physical keyboard), disable “Use on-screen keyboard”.</p></div>
+          </details>
+          <details>
+            <summary>Sign-in problems in-game</summary>
+            <div class="acc-body"><p>Minecraft Education requires a valid <strong>Microsoft 365 Education</strong> account.</p></div>
+          </details>
+          <details>
+            <summary>Sluggish gameplay</summary>
+            <div class="acc-body"><p>Games run best in fullscreen: <code>./Minecraft-Education-Linux-x86_64.AppImage --fullscreen</code>.</p></div>
+          </details>
+        </div>
+
+        <div class="support-band">
+          <h3>Still stuck? Get help fast</h3>
+          <p>Open a GitHub issue and attach the relevant log from <code>~/.local/share/mc-education/logs/</code> plus the output of <code>./Minecraft-Education-Linux-x86_64.AppImage --check</code>. The <code>--check</code> flag plus the three log files cover ~all failure modes.</p>
+          <div class="code-block inline">
+            <div class="code-head"><span>Diagnostics</span><button class="copy-btn" type="button" data-copy="./Minecraft-Education-Linux-x86_64.AppImage --check">Copy</button></div>
+            <pre><code>./Minecraft-Education-Linux-x86_64.AppImage --check</code></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DEVELOPMENT ============ -->
+    <section class="section" id="development">
+      <div class="wrap">
+        <div class="sec-head">
+          <p class="kicker">Development</p>
+          <h2>Build it yourself &amp; contribute</h2>
+        </div>
+        <div class="two-col">
+          <div>
+            <h3>Repository layout</h3>
+            <div class="tree" role="img" aria-label="Repository file tree">
+<pre><code>├── src/                        <span class="c-dim"># Everything that ships inside the AppImage</span>
+│   ├── AppRun                  <span class="c-dim"># AppImage entry point</span>
+│   ├── mc-education            <span class="c-dim"># Orchestrator: download, key, session, install, launch</span>
+│   ├── waydroid-setup.sh       <span class="c-dim"># One-time root setup</span>
+│   ├── minecraft-education.desktop
+│   └── minecraft-education.png <span class="c-dim"># App icon (512×512)</span>
+├── build-appimage.sh           <span class="c-dim"># Assembles AppDir and builds the AppImage</span>
+├── vendor/                     <span class="c-dim"># (gitignored) game package — icon extraction only</span>
+├── tools/                      <span class="c-dim"># (gitignored) downloaded appimagetool</span>
+└── README.md</code></pre>
+            </div>
+            <h3>Build from source</h3>
+            <div class="code-block">
+              <div class="code-head"><span>Terminal</span><button class="copy-btn" type="button" data-copy="./build-appimage.sh">Copy</button></div>
+              <pre><code>./build-appimage.sh</code></pre>
+            </div>
+            <p class="hint">Needs only <code>curl</code> and <code>python3</code>. The game package and Android image are fetched at <strong>runtime</strong>, on first launch. If the output file is still mounted (an instance running), the build fails with “Text file busy” — close any running instance first.</p>
+          </div>
+          <div>
+            <h3>Contributing</h3>
+            <p class="muted">Keep changes consistent with the existing design:</p>
+            <ul class="tick-list">
+              <li><strong>Isolation first</strong> — everything user-facing stays under <code>~/.local/share/mc-education</code>; no new global state without strong justification.</li>
+              <li><strong>No new root paths</strong> — prefer user-space mechanisms (adb, host-side key writes) over escalated ones.</li>
+              <li><strong>Session reuse stays</strong> — healthy sessions should be reused, not rebooted.</li>
+              <li><strong>Verify end-to-end</strong> — test the full flow: fresh setup → install → launch → relaunch (reuse path).</li>
+            </ul>
+            <div class="code-block">
+              <div class="code-head"><span>Before submitting</span><button class="copy-btn" type="button" data-copy="bash -n src/mc-education src/waydroid-setup.sh src/AppRun   # syntax check
+./build-appimage.sh                                          # must build clean">Copy</button></div>
+              <pre><code><span class="c-dim"># syntax check</span>
+bash -n src/mc-education src/waydroid-setup.sh src/AppRun
+<span class="c-dim"># must build clean</span>
+./build-appimage.sh</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ FOOTER ============ -->
+  <footer class="site-footer">
+    <div class="wrap footer-grid">
+      <div class="footer-brand">
+        <a class="brand" href="#top"><img src="assets/icon.png" alt="" width="28" height="28"><span>Minecraft Education for Linux</span></a>
+        <p>An independent, community-made launcher. Minecraft Education is a trademark of Microsoft Corporation; this project is <strong>not affiliated with, endorsed by, or sponsored by</strong> Microsoft or Mojang Studios.</p>
+      </div>
+      <nav aria-label="Footer">
+        <h4>Project</h4>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#architecture">Architecture</a></li>
+          <li><a href="#requirements">Requirements</a></li>
+          <li><a href="#development">Contributing</a></li>
+        </ul>
+      </nav>
+      <nav aria-label="Docs">
+        <h4>Docs</h4>
+        <ul>
+          <li><a href="#quickstart">Quick Start</a></li>
+          <li><a href="#usage">Usage &amp; flags</a></li>
+          <li><a href="#footprint">Data isolation</a></li>
+          <li><a href="#security">Security</a></li>
+          <li><a href="#troubleshooting">Troubleshooting</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </nav>
+      <nav aria-label="Legal">
+        <h4>Legal &amp; thanks</h4>
+        <ul>
+          <li><a href="https://waydro.id/" target="_blank" rel="noopener">Waydroid ↗</a></li>
+          <li><a href="https://gitlab.freedesktop.org/wayland/weston" target="_blank" rel="noopener">Weston ↗</a></li>
+          <li><a href="../LICENSE">License</a></li>
+        </ul>
+      </nav>
+    </div>
+    <div class="wrap footer-legal">
+      <p class="small muted">
+        The game package is fetched from APKPure, a third-party mirror of the free Google Play app; downloading and running
+        it is at your own discretion. A valid Microsoft 365 Education account is required to sign in, subject to Microsoft's
+        terms of service. Waydroid is an independent open-source project.
+      </p>
+      <p class="small muted">© <span id="year">2026</span> · Open source · Built for the Linux community</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
