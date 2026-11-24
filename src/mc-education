@@ -23,9 +23,10 @@ RESET=0
 CHECK=0
 SHOW_HELP=0
 USE_SUDO=0
+XAPK_LOCAL=""   # set by --xapk; a local .xapk replaces the download
 
-for arg in "$@"; do
-  case "$arg" in
+while [ $# -gt 0 ]; do
+  case "$1" in
     --help|-h)           SHOW_HELP=1 ;;
     --check)             CHECK=1 ;;
     --reset)             RESET=1 ;;
@@ -33,7 +34,12 @@ for arg in "$@"; do
     --fullscreen)        MULTI_WINDOW=0 ;;
     --force-x11)         FORCE_X11=1 ;;
     --sudo)              USE_SUDO=1 ;;
+    --xapk)
+      [ $# -ge 2 ] || { echo "--xapk needs a file path" >&2; exit 1; }
+      XAPK_LOCAL="$2"; REPAIR=1; shift ;;
+    --xapk=*)            XAPK_LOCAL="${1#--xapk=}"; REPAIR=1 ;;
   esac
+  shift
 done
 
 log()   { echo "[$APP_NAME] $*"; }
@@ -72,6 +78,7 @@ Options:
   --fullscreen    run inside the fullscreen Android UI (default: own window)
   --force-x11     skip the Wayland check (Waydroid needs Wayland; try Weston)
   --sudo          use 'sudo' instead of 'pkexec' for admin steps
+  --xapk PATH     use a local .xapk instead of downloading it (implies --repair)
 
 First run: downloads Minecraft Education (~413 MB) + the Android image (~2 GB)
 and asks for your admin password twice (setup, then app install). Everything
@@ -131,29 +138,44 @@ run_check() {
 # ---------------------------------------------------------------------------
 # downloads
 # ---------------------------------------------------------------------------
-download_apk() {
-  [ "$REPAIR" = "0" ] && [ -f "$APK_DIR/.downloaded" ] && return 0
+download_failed() {
+  die "download failed (the source may block automated downloads, HTTP 403). Download the .xapk in a browser, then run: $(basename "$0") --xapk /path/to/file.xapk"
+}
 
+fetch_xapk() {
   notify "Downloading Minecraft Education (~413 MB)…"
   log "Downloading Minecraft Education from APKPure (~413 MB)..."
   rm -f "$XAPK"
 
   if command -v curl >/dev/null 2>&1; then
     if is_tty; then
-      curl -fL --progress-bar -A "$XAPK_UA" -e "https://apkpure.com/" "$XAPK_URL" -o "$XAPK" || die "download failed"
+      curl -fL --progress-bar -A "$XAPK_UA" -e "https://apkpure.com/" "$XAPK_URL" -o "$XAPK" || download_failed
     else
-      curl -fsSL -A "$XAPK_UA" -e "https://apkpure.com/" "$XAPK_URL" -o "$XAPK" || die "download failed"
+      curl -fsSL -A "$XAPK_UA" -e "https://apkpure.com/" "$XAPK_URL" -o "$XAPK" || download_failed
     fi
   elif command -v wget >/dev/null 2>&1; then
-    wget -q --user-agent="$XAPK_UA" -O "$XAPK" "$XAPK_URL" || die "download failed"
+    wget -q --user-agent="$XAPK_UA" -O "$XAPK" "$XAPK_URL" || download_failed
   else
-    python3 - "$XAPK" <<'PY' || die "download failed"
+    python3 - "$XAPK" <<'PY' || download_failed
 import sys, urllib.request
 req = urllib.request.Request(
     "https://d.apkpure.com/b/APK/com.mojang.minecraftedu?version=latest",
     headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Chrome/126.0"})
 open(sys.argv[1], "wb").write(urllib.request.urlopen(req).read())
 PY
+  fi
+
+}
+
+download_apk() {
+  [ "$REPAIR" = "0" ] && [ -f "$APK_DIR/.downloaded" ] && return 0
+
+  if [ -n "$XAPK_LOCAL" ]; then
+    [ -r "$XAPK_LOCAL" ] || die "--xapk file is not readable: $XAPK_LOCAL"
+    log "Using local XAPK: $XAPK_LOCAL"
+    [ "$XAPK_LOCAL" -ef "$XAPK" ] || cp "$XAPK_LOCAL" "$XAPK" || die "could not copy $XAPK_LOCAL"
+  else
+    fetch_xapk
   fi
 
   [ -s "$XAPK" ] || die "downloaded file is empty"
@@ -169,6 +191,9 @@ for n in z.namelist():
     if n.lower().endswith(".apk"):
         z.extract(n, sys.argv[2])
 PY
+  # drop APKs left by a previous package (e.g. another source's splits) so
+  # install-multiple never mixes two builds
+  rm -f "$APK_DIR"/*.apk
   mv "$APK_DIR"/app/*.apk "$APK_DIR"/ 2>/dev/null
   rm -rf "$APK_DIR/app"
   ls "$APK_DIR"/*.apk >/dev/null 2>&1 || die "no APK found inside the downloaded package"
@@ -210,7 +235,12 @@ adb_ip() {
 
 # Host-side path of the Android /data dir (from the Waydroid config prop).
 android_data_dir() {
-  grep -m1 "^waydroid.host_data_path=" /var/lib/waydroid/waydroid.prop 2>/dev/null | cut -d= -f2
+  local d
+  d="$(grep -m1 "^waydroid.host_data_path=" /var/lib/waydroid/waydroid.prop 2>/dev/null | cut -d= -f2)"
+  # waydroid.prop is only generated when a session starts, so on a fresh
+  # install fall back to Waydroid's default user data dir (what it mounts as /data).
+  [ -n "$d" ] || d="$HOME/.local/share/waydroid/data"
+  printf '%s\n' "$d"
 }
 
 # The container's adb_keys file must contain the key in Android's proprietary
@@ -231,13 +261,25 @@ prepare_adb_key() {
     adb keygen "$priv" >/dev/null 2>&1 || die "adb keygen failed"
   fi
 
+  # some adb builds (e.g. Ubuntu's 1.0.41) only write the private key; derive the
+  # Android-format pubkey from it when missing
+  # write to a temp file and only keep a non-empty result, so a failed run can
+  # never leave an empty adbkey.pub that later runs would treat as valid
+  if [ ! -s "$pub" ]; then
+    adb pubkey "$priv" > "$pub.tmp" 2>/dev/null && [ -s "$pub.tmp" ] || { rm -f "$pub.tmp"; die "adb pubkey failed"; }
+    mv "$pub.tmp" "$pub"
+  fi
+
   # the adb server presents keys from $HOME/.android/adbkey, so register ours there
   cp "$priv" "$HOME/.android/adbkey" && chmod 600 "$HOME/.android/adbkey"
 
   # write the pubkey into Android's authorized-keys file (host side, before boot)
   mkdir -p "$data/misc/adb"
+  # Non-fatal: after the first boot Android owns misc/adb, so the host cannot
+  # write there. If adbd already trusts the key ("Always allow"), that is enough;
+  # install_apk reports a clear error otherwise.
   install -m 640 "$pub" "$data/misc/adb/adb_keys" 2>/dev/null || \
-    die "could not write the adb key into Android (is Waydroid initialized?)"
+    log "note: could not write adb_keys on the host (Android already owns it)"
   log "Android adb access configured."
 }
 
@@ -262,7 +304,7 @@ install_apk() {
 
   # never suspend again: prevents the freeze/lxc-info breakage permanently
   adb -s "$dev" shell settings put system screen_off_timeout 2147483647 >/dev/null 2>&1 || true
-  adb -s "$dev" shell settings put secure stay_on_while_plugged_in 3 >/dev/null 2>&1 || true
+  adb -s "$dev" shell settings put global stay_on_while_plugged_in 3 >/dev/null 2>&1 || true
 
   out="$(adb -s "$dev" install-multiple -r "$APK_DIR"/*.apk 2>&1)"
   echo "$out" | grep -qi success || die "APK install failed: $out"

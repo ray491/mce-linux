@@ -49,7 +49,7 @@ The entire Android environment lives inside the app's own data directory, so the
 | Capability | Detail |
 |---|---|
 | **Single-file distribution** | One ~200 KB AppImage; the Android image (~2 GB) and game package (~413 MB) are fetched on first run only. |
-| **Fully isolated** | All Android data (image, user data, installed apps) lives under `~/.local/share/mc-education`; `/var/lib/waydroid` is redirected there via symlink. |
+| **Isolated per user** | The app's own files (APK copy, adb key, logs) live under `~/.local/share/mc-education`. The Waydroid installation and the Android image are system-wide. Each user's Android data (`/data`: accounts, installed apps, settings) lives in `~/.local/share/waydroid/data`. |
 | **No Google account required** | The game is installed with `adb install-multiple` — the same mechanism the Play Store uses — straight from the APK bundle. |
 | **Windowed or fullscreen** | Defaults to a dedicated game window; `--fullscreen` switches to the full Android UI. |
 | **Fast relaunch** | A healthy Android session is **reused** instead of rebooted: repeat launches complete in ~1 second (see [Session Lifecycle](#session-lifecycle--performance)). |
@@ -102,7 +102,7 @@ The entire Android environment lives inside the app's own data directory, so the
 | Requirement | Detail |
 |---|---|
 | **CPU / Arch** | x86_64 (AMD64) |
-| **OS** | Ubuntu 22.04+ / Debian 12+ (tested on Ubuntu 26.04) |
+| **OS** | Ubuntu 22.04+ / Debian 12+ (tested on Ubuntu 26.04, and on Ubuntu 22.04.5, which is Lliurex 23) |
 | **Display server** | **Wayland** (Ubuntu default). On X11, run inside [Weston](https://gitlab.freedesktop.org/wayland/weston) or pass `--force-x11` at your own risk. |
 | **Disk** | ~6 GB free (Android image ~2 GB + game ~1 GB + working space) |
 | **RAM** | ~4 GB |
@@ -162,6 +162,7 @@ Sign in inside the app with your Microsoft 365 Education account as usual.
 | `--fullscreen` | Run inside the fullscreen Android UI instead of a dedicated window. |
 | `--reset` | Delete **all** app data (`~/.local/share/mc-education`) and exit. |
 | `--sudo` | Use `sudo` instead of `pkexec` for the admin step (e.g., terminal-only environments). |
+| `--xapk PATH` | Use a local `.xapk` file instead of downloading it (useful when the download is blocked). Implies `--repair`. The bundle must include an **x86_64** split (`config.x86_64.apk`); an arm64-only bundle will not install (see Troubleshooting). |
 | `--force-x11` | Skip the Wayland check (Waydroid requires Wayland; only use with Weston). |
 
 To fully shut down the background Android session after playing:
@@ -188,23 +189,24 @@ launch ──► is Android already running AND answering over adb?
 
 - The session is started with `setsid`, so it **keeps running in the background after the launcher exits** — the next launch finds it and reuses it.
 - A session is considered *healthy* only if Waydroid reports it `RUNNING` **and** Android answers `sys.boot_completed=1` over adb. Anything less triggers the clean-boot path.
-- Android's screen-off is disabled after install (`screen_off_timeout` max + `stay_on_while_plugged_in`), so the container **never suspends or freezes** — eliminating the class of bugs that plagued earlier iterations (see [Troubleshooting](#troubleshooting)).
+- Android's screen-off is disabled after install (`screen_off_timeout` max + `stay_on_while_plugged_in`), so the container normally **does not suspend or freeze** once adb is connected. The settings are applied as soon as adb answers; a freeze can still happen earlier, during first boot (see [Troubleshooting](#troubleshooting)).
 - The background session consumes RAM until you stop it (`waydroid session stop`) or reboot — the deliberate trade-off for instant relaunch.
 
 ---
 
 ## Data Isolation & System Footprint
 
-Everything the app owns lives in one directory:
+The app's own files live in one directory:
 
 | Path | Contents |
 |---|---|
 | `~/.local/share/mc-education/apk/` | Downloaded game package + extracted APK parts + install state markers |
-| `~/.local/share/mc-education/waydroid/` | Android image, user data, installed apps |
+| `~/.local/share/mc-education/waydroid/` | Android image (via the `/var/lib/waydroid` symlink, see below) |
+| `~/.local/share/waydroid/data/` | Android user data (`/data`): accounts, installed apps, settings. One per user, managed by Waydroid |
 | `~/.local/share/mc-education/adbkey*` | adb keypair (Android-format) used for installs |
 | `~/.local/share/mc-education/logs/` | `setup.log`, `session.log`, `install.log` |
 
-`/var/lib/waydroid` is a **symlink** into `~/.local/share/mc-education/waydroid/`, so **deleting `~/.local/share/mc-education` removes everything Waydroid owns**.
+`/var/lib/waydroid` is a **symlink** into `~/.local/share/mc-education/waydroid/`, which holds the Android image. Android user data is **not** in that folder: it is in `~/.local/share/waydroid/data/`. `--reset` removes `~/.local/share/mc-education` but does not remove that user data.
 
 The only system-level changes (made by the one-time root setup, all reversible):
 
@@ -217,9 +219,12 @@ The only system-level changes (made by the one-time root setup, all reversible):
 **Uninstall (complete):**
 
 ```bash
-./Minecraft-Education-Linux-x86_64.AppImage --reset    # removes all app data
+./Minecraft-Education-Linux-x86_64.AppImage --reset    # removes the app data and the Android image
+rm -rf ~/.local/share/waydroid                           # removes Android user data (accounts, apps)
 rm Minecraft-Education-Linux-x86_64.AppImage            # removes the launcher
 ```
+
+The system-level parts (Waydroid package, service, binder module) are listed above and must be removed separately.
 
 ---
 
@@ -231,7 +236,7 @@ rm Minecraft-Education-Linux-x86_64.AppImage            # removes the launcher
 | **adb key handling** | A dedicated keypair is generated with `adb keygen` and stored in the app's private data dir (not your personal `~/.android`). The container only ever sees the public half, written with shell-readable permissions (mode `0640`, group `shell`) that adbd can actually read. |
 | **No Google account data** | Install happens via adb from the downloaded APK bundle — no Play Store login, no GSF registration on your host. |
 | **Network surface** | The app downloads from APKPure (game package) and `repo.waydro.id` / SourceForge (Waydroid + Android image) only. In-game sign-in talks to Microsoft's official services, as on any platform. |
-| **Isolation** | Android runs in an LXC container whose data root is confined to your home directory; removing it removes the entire Android environment. |
+| **Isolation** | Android runs in a system-wide LXC container. Its user data (`/data`) is confined to each user's home (`~/.local/share/waydroid/data`); removing that folder removes that user's Android environment. |
 | **Auditability** | Every setup step logs to `~/.local/share/mc-education/logs/`; `--check` reports exact environment state at any time. |
 
 ---
@@ -252,6 +257,12 @@ rm Minecraft-Education-Linux-x86_64.AppImage            # removes the launcher
 | **Slow launches (>1 min)** | This is the **cold-boot** path (no healthy session exists). Repeat launches should reuse the session in ~1 s. If every launch cold-boots, the session is dying between launches — check `session.log`. |
 | **On-screen keyboard pops up** | Inside Android (Waydroid shell → Settings → System → Languages & input → Physical keyboard), disable "Use on-screen keyboard". |
 | **Sign-in problems in-game** | Minecraft Education requires a valid **Microsoft 365 Education** account. |
+| **`INSTALL_FAILED_NO_MATCHING_ABIS`** during install | The Waydroid Android image is **x86_64 only** and has no ARM translation. The game bundle must contain `config.x86_64.apk`. Bundles that only ship `config.arm64_v8a.apk` (e.g. some third-party mirrors) cannot be installed. Use a bundle with the x86_64 split, passed with `--xapk PATH`. |
+| **`INSTALL_FAILED_INVALID_APK ... version code inconsistent`** | APK parts from two different builds were mixed in `apk/`. The launcher now clears the old `*.apk` files before extracting a new package; if you still see this, run `--repair`. |
+| **Container `FROZEN`, `adb: device offline`, or `IP address: UNKNOWN`** | With **ufw** active, its default forward policy (`DEFAULT_FORWARD_POLICY="DROP"`) and input rules block the DHCP traffic from `waydroid0`, so the container never gets an IP. Allow the Waydroid interface: `sudo ufw allow in on waydroid0`, `sudo ufw route allow in on waydroid0`, `sudo ufw route allow out on waydroid0`, then `sudo waydroid container restart`. Check with `waydroid status`. |
+| **Container frozen during the first boot** | Android suspends about 60 s after boot if its screen-off timeout is still the default and the launcher has not applied its settings yet. This happens when adb authorization takes too long on the first boot, e.g. while you accept the USB debugging prompt. Accept the prompt quickly. If the container froze, run `sudo waydroid container unfreeze` and launch again. |
+| **`adb: unauthorized` after the first boot** | After the first boot Android owns `misc/adb` in its data dir, so the launcher can no longer write `adb_keys` there (it logs a note and continues). Authorise the computer on the Android side instead: open the Waydroid window (`waydroid show-full-ui`) and tick **Always allow** in the *Allow USB debugging?* prompt. Once accepted, adb keeps working across relaunches. |
+| **`download failed` (HTTP 403)** | APKPure's download endpoint is behind a Cloudflare challenge that blocks automated downloads (`curl`, `wget`, Python). Download the `.xapk` in a browser and run `./Minecraft-Education-Linux-x86_64.AppImage --xapk /path/to/file.xapk`. |
 | **Sluggish gameplay** | Games run best in fullscreen: `--fullscreen`. |
 
 ---

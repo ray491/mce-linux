@@ -49,6 +49,21 @@ command -v adb >/dev/null 2>&1 || \
 # --- 3. Isolated data dir ------------------------------------------------------
 # Keep the Android image + user data inside the app's data folder so that
 # deleting ~/.local/share/mc-education removes everything Waydroid owns.
+# The Waydroid package (or its auto-started service) can create $WAYDROID_ROOT as a
+# real directory before this step runs. Move it into the app's data dir so the
+# symlink can take its place; otherwise the image stays outside the app folder.
+if [ -d "$WAYDROID_ROOT" ] && [ ! -L "$WAYDROID_ROOT" ]; then
+  [ -e "$DATA_DIR/waydroid" ] && die "$DATA_DIR/waydroid already exists; move it aside and re-run"
+  log "Moving existing $WAYDROID_ROOT into $DATA_DIR/waydroid ..."
+  systemctl stop waydroid-container >/dev/null 2>&1 || \
+    die "could not stop waydroid-container; not moving $WAYDROID_ROOT while it may be in use"
+  if pgrep -f "lxc-start.*-n waydroid" >/dev/null 2>&1; then
+    die "a Waydroid container is still running; stop it before moving $WAYDROID_ROOT"
+  fi
+  mkdir -p "$DATA_DIR"
+  mv "$WAYDROID_ROOT" "$DATA_DIR/waydroid" || die "could not move $WAYDROID_ROOT"
+fi
+
 if [ ! -e "$WAYDROID_ROOT" ]; then
   log "Redirecting Waydroid data into $DATA_DIR/waydroid ..."
   mkdir -p "$DATA_DIR/waydroid"
